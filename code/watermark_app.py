@@ -3,7 +3,7 @@ import json
 from tkinter import Tk, Label, Button, Listbox, Entry, Scale, HORIZONTAL, filedialog, Canvas, StringVar, messagebox
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 from tkinterdnd2 import DND_FILES, TkinterDnD
-from tkinter import Canvas, Scrollbar, Frame
+from tkinter import Canvas, Scrollbar, Frame,ttk,simpledialog
 
 def make_scrollable(parent):
     """返回一个可滚动的 frame，所有控件都放这里"""
@@ -154,6 +154,10 @@ class WatermarkApp:
         self.drag_data = None
         self.watermark_id = None
 
+        self.tpl_combo = ttk.Combobox(self.scrollable_frame, state="readonly", width=20)
+        self.tpl_combo.pack(pady=5)
+        self.tpl_combo.bind("<<ComboboxSelected>>", self.on_template_selected)
+
         # 模板管理部分
         self.template_label = Label(self.scrollable_frame, text="水印模板管理")
         self.template_label.pack()
@@ -161,15 +165,17 @@ class WatermarkApp:
         self.save_template_button = Button(self.scrollable_frame, text="保存模板", command=self.save_template)
         self.save_template_button.pack()
 
-        self.load_template_button = Button(self.scrollable_frame, text="加载模板", command=self.load_template)
-        self.load_template_button.pack()
+        # self.load_template_button = Button(self.scrollable_frame, text="加载模板", command=self.load_all_templates)
+        # self.load_template_button.pack()
 
         self.delete_template_button = Button(self.scrollable_frame, text="删除模板", command=self.delete_template)
         self.delete_template_button.pack()
 
         # 默认模板加载
-        self.template_file = "watermark_template.json"
-        self.load_template()
+        self.template_file = "templates.json"   # 固定文件名
+        self.templates = []                     # 所有模板
+        self.curr_tpl_idx = 0                   # 当前使用模板
+        self.load_all_templates()               # 启动即加载
 
     def import_images(self):
         filetypes = [("图片文件", "*.jpg;*.jpeg;*.png;*.bmp;*.tiff")]
@@ -209,35 +215,83 @@ class WatermarkApp:
         self.watermark_position = position
         self.preview_watermark()
 
+    def sync_combo(self):
+        names = [t["name"] for t in self.templates]
+        self.tpl_combo["values"] = names
+        if names:
+            self.tpl_combo.current(self.curr_tpl_idx)
+
+    def on_template_selected(self, event):
+        idx = self.tpl_combo.current()
+        if idx >= 0:
+            self.apply_template(idx)
+
+    def apply_template(self, idx):
+        tpl = self.templates[idx]
+        self.text_entry.delete(0, "end")
+        self.text_entry.insert(0, tpl["text"])
+        self.opacity_scale.set(tpl["opacity"])
+        self.watermark_position = tpl["position"]
+        self.preview_watermark()
+        self.curr_tpl_idx = idx
+
     def save_template(self):
-        template = {
+        name = simpledialog.askstring("模板名称", "请输入模板名称：")
+        if not name: return
+        tpl = {
+            "name": name,
             "text": self.text_entry.get(),
             "opacity": self.opacity_scale.get(),
-            "position": self.watermark_position
+            "position": self.watermark_position,
+            "font": "arial.ttf",
+            "color": "#FFFFFF"
         }
+        self.templates.append(tpl)
+        self.curr_tpl_idx = len(self.templates) - 1
         with open(self.template_file, "w") as f:
-            json.dump(template, f)
-        messagebox.showinfo("模板保存", "水印模板已保存！")
+            json.dump(self.templates, f, indent=2)
+        self.sync_combo()
+        messagebox.showinfo("完成", f"模板“{name}”已保存！")
 
-    def load_template(self):
+    def load_all_templates(self):
         try:
             with open(self.template_file, "r") as f:
-                template = json.load(f)
-            self.text_entry.delete(0, "end")
-            self.text_entry.insert(0, template["text"])
-            self.opacity_scale.set(template["opacity"])
-            self.watermark_position = template["position"]
-            self.preview_watermark()
-            messagebox.showinfo("模板加载", "水印模板已加载！")
+                self.templates = json.load(f)
         except FileNotFoundError:
-            self.watermark_position = (0.5, 0.5)  # 默认居中
+            self.templates = []   # 第一次运行文件不存在就空列表
+        self.sync_combo()
+        if self.templates:
+            self.apply_template(0)  # 自动应用第一个
 
     def delete_template(self):
-        if os.path.exists(self.template_file):
-            os.remove(self.template_file)
-            messagebox.showinfo("模板删除", "水印模板已删除！")
-        else:
-            messagebox.showwarning("模板删除", "没有找到模板文件！")
+        if not self.templates: return
+        name = self.templates[self.curr_tpl_idx]["name"]
+        if messagebox.askyesno("确认", f"删除模板“{name}”？"):
+            del self.templates[self.curr_tpl_idx]
+            self.curr_tpl_idx = max(0, self.curr_tpl_idx - 1)
+            with open(self.template_file, "w") as f:
+                json.dump(self.templates, f, indent=2)
+            self.sync_combo()
+            # self.load_all_templates()
+            if self.templates:
+                self.apply_template(self.curr_tpl_idx)
+            else:
+                self.tpl_combo.set("")  # 完全清空显示
+
+    
+    def on_template_selected(self, event):
+        idx = self.tpl_combo.current()
+        if idx >= 0:
+            self.apply_template(idx)
+
+    def apply_template(self, idx):
+        tpl = self.templates[idx]
+        self.text_entry.delete(0, "end")
+        self.text_entry.insert(0, tpl["text"])
+        self.opacity_scale.set(tpl["opacity"])
+        self.watermark_position = tpl["position"]
+        self.preview_watermark()
+        self.curr_tpl_idx = idx
 
     def preview_watermark(self):
         if not self.current_image:
