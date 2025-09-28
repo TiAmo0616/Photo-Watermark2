@@ -3,8 +3,8 @@ import json
 from tkinter import Tk, Label, Button, Listbox, Entry, Scale, HORIZONTAL, filedialog, Canvas, StringVar, messagebox
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 from tkinterdnd2 import DND_FILES, TkinterDnD
-from tkinter import Canvas, Scrollbar, Frame,ttk,simpledialog
-
+from tkinter import Canvas, Scrollbar, Frame,ttk,simpledialog,Checkbutton,IntVar,OptionMenu,colorchooser
+import matplotlib.font_manager
 def make_scrollable(parent):
     """返回一个可滚动的 frame，所有控件都放这里"""
     canvas = Canvas(parent, highlightthickness=0)
@@ -72,8 +72,45 @@ class WatermarkApp:
         self.opacity_scale.set(50)
         self.opacity_scale.pack()
 
-        # self.preview_button = Button(self.scrollable_frame, text="预览水印", command=self.preview_watermark)
-        # self.preview_button.pack()
+        # 字体选择
+        self.font_label = Label(self.scrollable_frame, text="字体：")
+        self.font_label.pack()
+
+        self.font_var = StringVar()
+        #self.font_option = OptionMenu(self.scrollable_frame, self.font_var, *self.get_system_fonts())
+        self.font_option = OptionMenu(self.scrollable_frame, self.font_var, *self.get_system_fonts(), command=lambda _: self.preview_watermark())
+        self.font_option.pack()
+
+        self.font_size_label = Label(self.scrollable_frame, text="字号：")
+        self.font_size_label.pack()
+
+        self.font_size_var = StringVar(value="20")
+        self.font_size_entry = Entry(self.scrollable_frame, textvariable=self.font_size_var, width=5)
+        self.font_size_entry.pack()
+        self.font_size_entry.bind("<KeyRelease>", lambda e: self.preview_watermark())
+        
+
+        self.bold_var = IntVar()
+        self.bold_checkbox = Checkbutton(self.scrollable_frame, text="粗体", variable=self.bold_var, command=self.preview_watermark)
+        self.bold_checkbox.pack()
+
+        self.italic_var = IntVar()
+        self.italic_checkbox = Checkbutton(self.scrollable_frame, text="斜体", variable=self.italic_var, command=self.preview_watermark)
+        self.italic_checkbox.pack()
+
+        self.color_button = Button(self.scrollable_frame, text="选择字体颜色", command=self.choose_color)
+        self.color_button.pack()
+
+        self.color_label = Label(self.scrollable_frame, text="字体颜色：#FFFFFF")
+        self.color_label.pack()
+
+        self.shadow_var = IntVar()
+        self.shadow_checkbox = Checkbutton(self.scrollable_frame, text="添加阴影", variable=self.shadow_var, command=self.preview_watermark)
+        self.shadow_checkbox.pack()
+
+        self.stroke_var = IntVar()
+        self.stroke_checkbox = Checkbutton(self.scrollable_frame, text="添加描边", variable=self.stroke_var, command=self.preview_watermark)
+        self.stroke_checkbox.pack()
 
         # 图片导出部分
         self.export_label = Label(self.scrollable_frame, text="图片导出")
@@ -176,6 +213,84 @@ class WatermarkApp:
         self.templates = []                     # 所有模板
         self.curr_tpl_idx = 0                   # 当前使用模板
         self.load_all_templates()               # 启动即加载
+
+    def get_system_fonts(self):
+        fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
+        font_names = [os.path.basename(font).split('.')[0] for font in fonts]
+        return sorted(set(font_names))
+
+    def choose_color(self):
+        color = colorchooser.askcolor()[1]
+        if color:
+            self.color_label.config(text=f"字体颜色：{color}")
+            self.preview_watermark()
+
+    # def get_font_path(self, font_name, bold, italic):
+    #     fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
+    #     for font in fonts:
+    #         if font_name in font:
+    #             if bold and italic:
+    #                 if "Bold" in font and "Italic" in font:
+    #                     return font
+    #             elif bold:
+    #                 if "Bold" in font:
+    #                     return font
+    #             elif italic:
+    #                 if "Italic" in font:
+    #                     return font
+    #             else:
+    #                 return font
+    #     return "arial.ttf"  # 默认字体
+    def get_font_path(self, font_name, bold, italic):
+        # 动态查找系统字体路径
+        font_files = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
+        font_paths = {os.path.basename(font).split('.')[0]: font for font in font_files}
+
+        # 构造字体文件名
+        if bold and italic:
+            font_file_name = f"{font_name}-bold-italic"
+        elif bold:
+            font_file_name = f"{font_name}-bold"
+        elif italic:
+            font_file_name = f"{font_name}-italic"
+        else:
+            font_file_name = font_name
+
+        # 检查字体文件是否存在
+        font_path = font_paths.get(font_file_name)
+        if not font_path:
+            # 如果找不到字体文件，弹出警告框通知用户
+            if bold and italic:
+                messagebox.showwarning("警告", f"当前字体不支持粗体和斜体样式。")
+            elif bold:
+                messagebox.showwarning("警告", f"当前字体不支持粗体样式。")
+            elif italic:
+                messagebox.showwarning("警告", f"当前字体不支持斜体样式。")
+            
+            # 自动取消用户对加粗或斜体的勾选
+            if bold:
+                self.bold_var.set(0)
+            if italic:
+                self.italic_var.set(0)
+            
+            # 重新构造字体文件名
+            if bold and italic:
+                font_file_name = f"{font_name}-italic"
+            elif bold:
+                font_file_name = font_name
+            elif italic:
+                font_file_name = f"{font_name}-bold"
+            else:
+                font_file_name = font_name
+
+            # 再次检查字体文件是否存在
+            # font_path = font_paths.get(font_file_name)
+            # if not font_path:
+            #     messagebox.showerror("错误", "无法找到任何支持的字体文件，请确保系统中安装了相应的字体。")
+            #     return None
+
+        return font_path
+
 
     def import_images(self):
         filetypes = [("图片文件", "*.jpg;*.jpeg;*.png;*.bmp;*.tiff")]
@@ -293,54 +408,203 @@ class WatermarkApp:
         self.preview_watermark()
         self.curr_tpl_idx = idx
 
+    # def preview_watermark(self):
+    #     if not self.current_image:
+    #         #messagebox.showwarning("警告", "请先选择图片！")
+    #         return
+
+    #     text   = self.text_entry.get()
+    #     opacity = self.opacity_scale.get() / 100
+
+    #     # 复制底图
+    #     self.watermarked_image = self.current_image.copy()
+    #     draw = ImageDraw.Draw(self.watermarked_image)
+    #     font = ImageFont.load_default()
+
+    #     # 用 textbbox 拿到文字框尺寸（兼容默认字体）
+    #     left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    #     tw, th = right - left, bottom - top
+
+    #     # 基础中心坐标
+    #     cx = self.watermarked_image.width * self.watermark_position[0]
+    #     cy = self.watermarked_image.height * self.watermark_position[1]
+
+    #     # 边缘安全偏移（2%）
+    #     margin_x = self.watermarked_image.width  * 0.02
+    #     margin_y = self.watermarked_image.height * 0.02
+
+    #     # 根据九宫格决定偏移方向
+    #     if self.watermark_position[0] == 0:          # 左
+    #         cx = margin_x + tw / 2
+    #     elif self.watermark_position[0] == 1:        # 右
+    #         cx = self.watermarked_image.width - margin_x - tw / 2
+
+    #     if self.watermark_position[1] == 0:          # 上
+    #         cy = margin_y + th
+    #     elif self.watermark_position[1] == 1:        # 下
+    #         cy = self.watermarked_image.height - margin_y - th / 2 + top
+
+    #     # 中心列/行保持原算法
+    #     x = int(cx - tw / 2)
+    #     y = int(cy - th / 2 - top)
+
+    #     # 生成透明文字层
+    #     text_layer = Image.new("RGBA", self.watermarked_image.size, (255, 255, 255, 0))
+    #     text_draw = ImageDraw.Draw(text_layer)
+    #     text_draw.text((x, y), text, font=font, fill=(255, 255, 255, int(255 * opacity)))
+
+    #     # 合成并显示
+    #     self.watermarked_image = Image.alpha_composite(self.watermarked_image.convert("RGBA"), text_layer)
+    #     self.display_image(self.watermarked_image)
+    # def preview_watermark(self):
+    #     if not self.current_image:
+    #         return
+
+    #     text = self.text_entry.get()
+    #     opacity = self.opacity_scale.get() / 100
+    #     font_name = self.font_var.get()
+    #     font_size = int(self.font_size_var.get())
+    #     bold = self.bold_var.get()
+    #     italic = self.italic_var.get()
+    #     color = self.color_label.cget("text").split("：")[1]
+    #     shadow = self.shadow_var.get()
+    #     stroke = self.stroke_var.get()
+
+    #     font_path = self.get_font_path(font_name, bold, italic)
+    #     font = ImageFont.truetype(font_path, font_size)
+
+    #     # 复制底图
+    #     self.watermarked_image = self.current_image.copy()
+    #     draw = ImageDraw.Draw(self.watermarked_image)
+
+    #     # 文字框尺寸
+    #     left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    #     tw, th = right - left, bottom - top
+
+    #     # 基础中心
+    #     cx = self.watermarked_image.width * self.watermark_position[0]
+    #     cy = self.watermarked_image.height * self.watermark_position[1]
+
+    #     # 边缘安全边距 2%
+    #     margin_x = self.watermarked_image.width * 0.02
+    #     margin_y = self.watermarked_image.height * 0.02
+
+    #     # 横向边缘
+    #     if self.watermark_position[0] == 0:          # 左
+    #         cx = margin_x + tw / 2
+    #     elif self.watermark_position[0] == 1:        # 右
+    #         cx = self.watermarked_image.width - margin_x - tw / 2
+
+    #     # 纵向边缘
+    #     if self.watermark_position[1] == 0:          # 上
+    #         cy = margin_y + th - top          # -top 把 baseline 下移，避免升部被裁
+    #     elif self.watermark_position[1] == 1:        # 下
+    #         cy = self.watermarked_image.height - margin_y - th / 2 - top
+
+    #     # 最终左上角
+    #     x = int(cx - tw / 2)
+    #     y = int(cy - th / 2 - top)
+
+    #     # 生成透明文字层
+    #     text_layer = Image.new("RGBA", self.watermarked_image.size, (255, 255, 255, 0))
+    #     text_draw = ImageDraw.Draw(text_layer)
+
+    #     if shadow:
+    #         shadow_color = (0, 0, 0, int(255 * 0.5))  # 阴影颜色
+    #         shadow_offset = (2, 2)
+    #         text_draw.text((x + shadow_offset[0], y + shadow_offset[1]), text, font=font, fill=shadow_color)
+
+    #     if stroke:
+    #         stroke_color = (0, 0, 0, int(255 * 0.5))  # 描边颜色
+    #         stroke_width = 2
+    #         text_draw.text((x - stroke_width, y - stroke_width), text, font=font, fill=stroke_color)
+    #         text_draw.text((x + stroke_width, y + stroke_width), text, font=font, fill=stroke_color)
+
+    #     text_draw.text((x, y), text, font=font, fill=(int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), int(255 * opacity)))
+
+    #     # 合成并显示
+    #     self.watermarked_image = Image.alpha_composite(self.watermarked_image.convert("RGBA"), text_layer)
+    #     self.display_image(self.watermarked_image)
     def preview_watermark(self):
         if not self.current_image:
-            #messagebox.showwarning("警告", "请先选择图片！")
             return
 
-        text   = self.text_entry.get()
+        text = self.text_entry.get()
         opacity = self.opacity_scale.get() / 100
+        font_name = self.font_var.get()
+        font_size = int(self.font_size_var.get())
+        bold = self.bold_var.get()
+        italic = self.italic_var.get()
+        color = self.color_label.cget("text").split("：")[1]
+        shadow = self.shadow_var.get()
+        stroke = self.stroke_var.get()
+
+        # 获取字体路径
+        font_path = self.get_font_path(font_name, bold, italic)
+        if font_path is None:
+            return  # 如果字体路径无效，直接返回
+
+        # 加载字体
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except IOError:
+            messagebox.showerror("错误", f"无法加载字体文件：{font_path}")
+            return
 
         # 复制底图
         self.watermarked_image = self.current_image.copy()
         draw = ImageDraw.Draw(self.watermarked_image)
-        font = ImageFont.load_default()
 
-        # 用 textbbox 拿到文字框尺寸（兼容默认字体）
+        # 文字框尺寸
         left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
         tw, th = right - left, bottom - top
 
-        # 基础中心坐标
+        # 基础中心
         cx = self.watermarked_image.width * self.watermark_position[0]
         cy = self.watermarked_image.height * self.watermark_position[1]
 
-        # 边缘安全偏移（2%）
-        margin_x = self.watermarked_image.width  * 0.02
+        # 边缘安全边距 2%
+        margin_x = self.watermarked_image.width * 0.02
         margin_y = self.watermarked_image.height * 0.02
 
-        # 根据九宫格决定偏移方向
+        # 横向边缘
         if self.watermark_position[0] == 0:          # 左
             cx = margin_x + tw / 2
         elif self.watermark_position[0] == 1:        # 右
             cx = self.watermarked_image.width - margin_x - tw / 2
 
+        # 纵向边缘
         if self.watermark_position[1] == 0:          # 上
-            cy = margin_y + th
+            cy = margin_y + th - top          # -top 把 baseline 下移，避免升部被裁
         elif self.watermark_position[1] == 1:        # 下
-            cy = self.watermarked_image.height - margin_y - th / 2 + top
+            cy = self.watermarked_image.height - margin_y - th / 2 - top
 
-        # 中心列/行保持原算法
+        # 最终左上角
         x = int(cx - tw / 2)
         y = int(cy - th / 2 - top)
 
         # 生成透明文字层
         text_layer = Image.new("RGBA", self.watermarked_image.size, (255, 255, 255, 0))
         text_draw = ImageDraw.Draw(text_layer)
-        text_draw.text((x, y), text, font=font, fill=(255, 255, 255, int(255 * opacity)))
+
+        if shadow:
+            shadow_color = (0, 0, 0, int(255 * 0.5))  # 阴影颜色
+            shadow_offset = (2, 2)
+            text_draw.text((x + shadow_offset[0], y + shadow_offset[1]), text, font=font, fill=shadow_color)
+
+        if stroke:
+            stroke_color = (0, 0, 0, int(255 * 0.5))  # 描边颜色
+            stroke_width = 2
+            text_draw.text((x - stroke_width, y - stroke_width), text, font=font, fill=stroke_color)
+            text_draw.text((x + stroke_width, y + stroke_width), text, font=font, fill=stroke_color)
+
+        text_draw.text((x, y), text, font=font, fill=(int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), int(255 * opacity)))
 
         # 合成并显示
         self.watermarked_image = Image.alpha_composite(self.watermarked_image.convert("RGBA"), text_layer)
         self.display_image(self.watermarked_image)
+
+
 
     def set_format(self, format):
         self.format_var.set(format)
@@ -350,6 +614,83 @@ class WatermarkApp:
         if folder:
             self.export_folder_entry.delete(0, "end")
             self.export_folder_entry.insert(0, folder)
+
+    # def export_images(self):
+    #     export_folder = self.export_folder_entry.get()
+    #     prefix = self.prefix_var.get()
+    #     suffix = self.suffix_var.get()
+    #     output_format = self.format_var.get()
+
+    #     if not export_folder:
+    #         messagebox.showwarning("警告", "请先选择导出文件夹！")
+    #         return
+
+    #     if not self.image_paths:
+    #         messagebox.showwarning("警告", "没有图片可导出！")
+    #         return
+
+    #     # 检查导出文件夹是否与原始图片所在文件夹相同
+    #     for image_path in self.image_paths:
+    #         if os.path.dirname(image_path) == export_folder:
+    #             messagebox.showerror("错误", "导出文件夹不能与原始图片所在文件夹相同！")
+    #             return
+
+    #     text = self.text_entry.get()
+    #     opacity = self.opacity_scale.get() / 100
+
+    #     for image_path in self.image_paths:
+    #         # 打开原始图片
+    #         image = Image.open(image_path)
+
+    #         # 创建水印
+    #         # 创建水印（统一用 image 原始尺寸）
+    #         watermarked_image = image.copy()
+    #         draw = ImageDraw.Draw(watermarked_image)
+    #         font = ImageFont.load_default()
+
+    #         # 文字框尺寸
+    #         left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    #         tw, th = right - left, bottom - top
+
+    #         # 基础中心
+    #         cx = image.width * self.watermark_position[0]
+    #         cy = image.height * self.watermark_position[1]
+
+    #         # 边缘安全边距 2%
+    #         margin_x = image.width * 0.02
+    #         margin_y = image.height * 0.02
+
+    #         # 横向边缘
+    #         if self.watermark_position[0] == 0:          # 左
+    #             cx = margin_x + tw / 2
+    #         elif self.watermark_position[0] == 1:        # 右
+    #             cx = image.width - margin_x - tw / 2
+
+    #         # 纵向边缘
+    #         if self.watermark_position[1] == 0:          # 上
+    #             cy = margin_y + th - top          # -top 把 baseline 下移，避免升部被裁
+    #         elif self.watermark_position[1] == 1:        # 下
+    #             cy = image.height - margin_y - th / 2 - top
+
+    #         # 最终左上角
+    #         x = int(cx - tw / 2)
+    #         y = int(cy - th / 2 - top)
+
+    #         # 生成文字层并合成
+    #         text_layer = Image.new("RGBA", watermarked_image.size, (255, 255, 255, 0))
+    #         text_draw = ImageDraw.Draw(text_layer)
+    #         text_draw.text((x, y), text, font=font, fill=(255, 255, 255, int(255 * opacity)))
+    #         watermarked_image = Image.alpha_composite(watermarked_image.convert("RGBA"), text_layer)
+                        
+
+    #         # 保存水印图片
+    #         base_name = os.path.basename(image_path)
+    #         name, ext = os.path.splitext(base_name)
+    #         new_name = f"{prefix}{name}{suffix}.{output_format.lower()}"
+    #         export_path = os.path.join(export_folder, new_name)
+    #         watermarked_image.convert("RGB").save(export_path, format=output_format)
+
+    #     messagebox.showinfo("完成", "图片导出完成！")
 
     def export_images(self):
         export_folder = self.export_folder_entry.get()
@@ -373,16 +714,33 @@ class WatermarkApp:
 
         text = self.text_entry.get()
         opacity = self.opacity_scale.get() / 100
+        font_name = self.font_var.get()
+        font_size = int(self.font_size_var.get())
+        bold = self.bold_var.get()
+        italic = self.italic_var.get()
+        color = self.color_label.cget("text").split("：")[1]
+        shadow = self.shadow_var.get()
+        stroke = self.stroke_var.get()
+
+        # 获取字体路径
+        font_path = self.get_font_path(font_name, bold, italic)
+        if font_path is None:
+            return  # 如果字体路径无效，直接返回
+
+        # 加载字体
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+        except IOError:
+            messagebox.showerror("错误", f"无法加载字体文件：{font_path}")
+            return
 
         for image_path in self.image_paths:
             # 打开原始图片
             image = Image.open(image_path)
 
             # 创建水印
-            # 创建水印（统一用 image 原始尺寸）
             watermarked_image = image.copy()
             draw = ImageDraw.Draw(watermarked_image)
-            font = ImageFont.load_default()
 
             # 文字框尺寸
             left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
@@ -412,14 +770,25 @@ class WatermarkApp:
             x = int(cx - tw / 2)
             y = int(cy - th / 2 - top)
 
-            # 生成文字层并合成
-            text_layer = Image.new("RGBA", watermarked_image.size, (255, 255, 255, 0))
+            # 生成透明文字层
+            text_layer = Image.new("RGBA", image.size, (255, 255, 255, 0))
             text_draw = ImageDraw.Draw(text_layer)
-            text_draw.text((x, y), text, font=font, fill=(255, 255, 255, int(255 * opacity)))
-            watermarked_image = Image.alpha_composite(watermarked_image.convert("RGBA"), text_layer)
-                        
 
-            # 保存水印图片
+            if shadow:
+                shadow_color = (0, 0, 0, int(255 * 0.5))  # 阴影颜色
+                shadow_offset = (2, 2)
+                text_draw.text((x + shadow_offset[0], y + shadow_offset[1]), text, font=font, fill=shadow_color)
+
+            if stroke:
+                stroke_color = (0, 0, 0, int(255 * 0.5))  # 描边颜色
+                stroke_width = 2
+                text_draw.text((x - stroke_width, y - stroke_width), text, font=font, fill=stroke_color)
+                text_draw.text((x + stroke_width, y + stroke_width), text, font=font, fill=stroke_color)
+
+            text_draw.text((x, y), text, font=font, fill=(int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), int(255 * opacity)))
+
+            # 合成并保存
+            watermarked_image = Image.alpha_composite(image.convert("RGBA"), text_layer)
             base_name = os.path.basename(image_path)
             name, ext = os.path.splitext(base_name)
             new_name = f"{prefix}{name}{suffix}.{output_format.lower()}"
