@@ -145,10 +145,23 @@ class WatermarkApp:
         self.folder_button = ttk.Button(button_frame, text="导入文件夹", command=self.import_folder, style="Accent.TButton")
         self.folder_button.pack(side="left", padx=5)
 
-        self.image_listbox = Listbox(section_frame, width=50, height=10, relief="solid", borderwidth=1, 
+        # 创建一个框架来包含Listbox和滚动条
+        listbox_frame = tk.Frame(section_frame, bg="#f8fafc")
+        listbox_frame.pack(pady=10)
+
+        # 创建Listbox和滚动条
+        self.image_listbox = Listbox(listbox_frame, width=50, height=10, relief="solid", borderwidth=1, 
                                      bg="white", fg="#1e293b", font=("Arial", 10),
                                      selectbackground="#3b82f6", selectforeground="white")
-        self.image_listbox.pack(pady=10)
+        
+        # 创建垂直滚动条
+        listbox_scrollbar = Scrollbar(listbox_frame, orient="vertical", command=self.image_listbox.yview)
+        self.image_listbox.configure(yscrollcommand=listbox_scrollbar.set)
+        
+        # 布局Listbox和滚动条
+        self.image_listbox.pack(side="left", fill="both", expand=True)
+        listbox_scrollbar.pack(side="right", fill="y")
+
         self.image_listbox.bind("<<ListboxSelect>>", self.display_selected_image)
 
         self.image_listbox.drop_target_register(DND_FILES)
@@ -789,49 +802,55 @@ class WatermarkApp:
             angle = self.image_rotate.get()          # 新增：获取旋转角度
 
             # 1. 缩放
-            watermark = self.watermark_image.resize(
-                (int(self.watermark_original_width * self.watermark_scale),
-                 int(self.watermark_original_height * self.watermark_scale)),
-                Image.LANCZOS)
+            new_width = int(self.watermark_original_width * self.watermark_scale)
+            new_height = int(self.watermark_original_height * self.watermark_scale)
+            
+            # 确保尺寸大于0
+            if new_width > 0 and new_height > 0:
+                watermark = self.watermark_image.resize((new_width, new_height), Image.LANCZOS)
 
-            # 2. 透明度
-            transparent_layer = Image.new("RGBA", watermark.size, (255, 255, 255, 0))
-            watermark = Image.blend(transparent_layer, watermark, self.watermark_opacity)
+                # 2. 透明度
+                transparent_layer = Image.new("RGBA", watermark.size, (255, 255, 255, 0))
+                watermark = Image.blend(transparent_layer, watermark, self.watermark_opacity)
 
-            # 3. 旋转（expand=1 保证四角完整）
-            if angle != 0:
-                watermark = watermark.rotate(angle, expand=1)
+                # 3. 旋转（expand=1 保证四角完整）
+                if angle != 0:
+                    watermark = watermark.rotate(angle, expand=1)
 
-            # 4. 位置计算（用旋转后的尺寸）
-            cx = self.watermarked_image.width * self.image_watermark_pos[0]
-            cy = self.watermarked_image.height * self.image_watermark_pos[1]
-            margin_x = self.watermarked_image.width * 0.02
-            margin_y = self.watermarked_image.height * 0.02
+                # 4. 位置计算（用旋转后的尺寸）
+                cx = self.watermarked_image.width * self.image_watermark_pos[0]
+                cy = self.watermarked_image.height * self.image_watermark_pos[1]
+                margin_x = self.watermarked_image.width * 0.02
+                margin_y = self.watermarked_image.height * 0.02
 
-            if self.image_watermark_pos[0] == 0:
-                cx = margin_x + watermark.width / 2
-            elif self.image_watermark_pos[0] == 1:
-                cx = self.watermarked_image.width - margin_x - watermark.width / 2
+                if self.image_watermark_pos[0] == 0:
+                    cx = margin_x + watermark.width / 2
+                elif self.image_watermark_pos[0] == 1:
+                    cx = self.watermarked_image.width - margin_x - watermark.width / 2
 
-            if self.image_watermark_pos[1] == 0:
-                cy = margin_y + watermark.height / 2
-            elif self.image_watermark_pos[1] == 1:
-                cy = self.watermarked_image.height - margin_y - watermark.height / 2
+                if self.image_watermark_pos[1] == 0:
+                    cy = margin_y + watermark.height / 2
+                elif self.image_watermark_pos[1] == 1:
+                    cy = self.watermarked_image.height - margin_y - watermark.height / 2
 
-            x = int(cx - watermark.width / 2)
-            y = int(cy - watermark.height / 2)
+                x = int(cx - watermark.width / 2)
+                y = int(cy - watermark.height / 2)
 
-            # 5. 粘贴
-            self.watermarked_image.paste(watermark, (x, y), watermark)
+                # 5. 粘贴
+                self.watermarked_image.paste(watermark, (x, y), watermark)
 
-            # 6. 记录预览命中框（缩放+偏移）
-            w, h = watermark.size
-            self.image_bbox = (
-                int(x * self.preview_scale) + self.offset_x,
-                int(y * self.preview_scale) + self.offset_y,
-                int((x + w) * self.preview_scale) + self.offset_x,
-                int((y + h) * self.preview_scale) + self.offset_y
-            )
+                # 6. 记录预览命中框（缩放+偏移）
+                w, h = watermark.size
+                self.image_bbox = (
+                    int(x * self.preview_scale) + self.offset_x,
+                    int(y * self.preview_scale) + self.offset_y,
+                    int((x + w) * self.preview_scale) + self.offset_x,
+                    int((y + h) * self.preview_scale) + self.offset_y
+                )
+            else:
+                # 如果尺寸无效，则不显示水印
+                if hasattr(self, 'image_bbox'):
+                    delattr(self, 'image_bbox')
         self.display_image(self.watermarked_image)
 
             
