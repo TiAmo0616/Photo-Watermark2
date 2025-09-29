@@ -524,14 +524,19 @@ class WatermarkApp:
 
     def sync_combo(self):
         names = [t["name"] for t in self.templates]
-        self.tpl_combo["values"] = names
+        # 添加"无模板"选项
+        self.tpl_combo["values"] = ["无模板"] + names
         if names:
-            self.tpl_combo.current(self.curr_tpl_idx)
+            self.tpl_combo.current(self.curr_tpl_idx + 1)  # +1 because of "无模板" option
+        else:
+            self.tpl_combo.current(0)
 
     def on_template_selected(self, event):
         idx = self.tpl_combo.current()
-        if idx >= 0:
-            self.apply_template(idx)
+        if idx == 0:  # 选择了"无模板"
+            self.clear_all_settings()
+        elif idx > 0:  # 选择了具体模板
+            self.apply_template(idx - 1)  # -1 to account for "无模板" option
 
     def apply_template(self, idx):
         tpl = self.templates[idx]
@@ -640,13 +645,34 @@ class WatermarkApp:
             else:
                 self.tpl_combo.set("")  # 完全清空显示
 
-    
-    def on_template_selected(self, event):
-        idx = self.tpl_combo.current()
-        if idx >= 0:
-            self.apply_template(idx)
-
-
+    def clear_all_settings(self):
+        """清空所有水印设置"""
+        # 清空文本水印设置
+        self.text_entry.delete(0, "end")
+        self.opacity_scale.set(50)
+        self.watermark_position = (0.5, 0.5)
+        self.font_var.set(self.get_system_fonts()[0] if self.get_system_fonts() else "arial")
+        self.font_size_var.set("20")
+        self.bold_var.set(0)
+        self.italic_var.set(0)
+        self.color_label.config(text="字体颜色：#FFFFFF")
+        self.shadow_var.set(0)
+        self.stroke_var.set(0)
+        self.text_rotate.set(0.0)
+        
+        # 清空图片水印设置
+        self.watermark_image = None
+        self.watermark_scale = 1.0
+        self.watermark_opacity = 1.0
+        self.image_watermark_pos = (0.5, 0.5)
+        self.image_rotate.set(0.0)
+        
+        # 重置滑块
+        self.scale_slider.set(1.0)
+        self.opacity_slider.set(100)
+        
+        # 更新预览
+        self.preview_watermark()
 
     def preview_watermark(self):
         if not self.current_image:
