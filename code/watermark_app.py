@@ -10,16 +10,17 @@ import numpy as np
 from tkinterdnd2 import DND_FILES, TkinterDnD
 from tkinter import Canvas, Scrollbar, Frame,ttk,simpledialog,Checkbutton,IntVar,OptionMenu,colorchooser
 import matplotlib.font_manager
+
 def make_scrollable(parent):
     """返回一个可滚动的 frame，所有控件都放这里"""
-    canvas = Canvas(parent, highlightthickness=0)
+    canvas = Canvas(parent, highlightthickness=0, bg="#f8fafc")
     vbar = Scrollbar(parent, orient="vertical", command=canvas.yview)
     canvas.configure(yscrollcommand=vbar.set)
 
     vbar.pack(side="right", fill="y")
     canvas.pack(side="left", fill="both", expand=True)
 
-    frame = Frame(canvas)
+    frame = Frame(canvas, bg="#f8fafc")
     canvas.create_window((0, 0), window=frame, anchor="nw")
 
     # 让框架大小随内容自动更新
@@ -35,12 +36,37 @@ def make_scrollable(parent):
     return frame
 
 class WatermarkApp:
+    PREVIEW_MAX_W = 540          # 预览区最大宽度
+    PREVIEW_MAX_H = 690          # 预览区最大高度
     # -------------------- 主入口 --------------------
     def __init__(self, root):
         self.root = root
         self.root.title("水印文件本地应用")
+        self.root.geometry("1200x800")
+        self.root.configure(bg="#f1f5f9")
 
-        self.scrollable_frame = make_scrollable(root)  # 通用滚动区域
+
+        # 创建左右分栏
+        self.paned_window = tk.PanedWindow(root, orient=tk.HORIZONTAL, bg="#e2e8f0", sashwidth=3)
+        self.paned_window.pack(fill=tk.BOTH, expand=1)
+
+        # 左侧
+        self.settings_frame = tk.Frame(self.paned_window, width=640, height=900, bg="#f8fafc", relief="raised", bd=1)
+        self.paned_window.add(self.settings_frame)
+
+        # 右侧
+        self.preview_frame = tk.Frame(self.paned_window, width=640, height=900, bg="#f1f5f9")
+        self.paned_window.add(self.preview_frame)
+
+        # 设置初始大小比例为1:1
+        self.paned_window.sash_place(0, 600, 0)
+
+        # 防止 Frame 被压缩
+        self.settings_frame.pack_propagate(False)
+        self.preview_frame.pack_propagate(False)
+
+        # 左侧滚动区域
+        self.scrollable_frame = make_scrollable(self.settings_frame)  # 通用滚动区域
 
         # 1. 数据初始化（变量先全部立好）
         self._init_data()
@@ -49,10 +75,10 @@ class WatermarkApp:
         self._build_image_import()
         self._build_text_watermark()
         self._build_image_watermark()
-        self._build_export()
-        self._build_preview()
         self._build_layout()
         self._build_template()
+        self._build_export()
+        self._build_preview()  # 将预览区域移到右侧
 
         # 3. 业务事件绑定
         self._bind_events()
@@ -97,228 +123,275 @@ class WatermarkApp:
         self.text_rotate  = tk.DoubleVar(value=0.0)
         self.image_rotate = tk.DoubleVar(value=0.0)
 
+        # 文件名前缀和后缀
+        self.prefix_var = StringVar(value="")
+        self.suffix_var = StringVar(value="")
+        
+        # 导出格式
+        self.format_var = StringVar(value="JPEG")
+
     # -------------------- 2. 图片导入 --------------------
     def _build_image_import(self):
-        self.import_label = Label(self.scrollable_frame, text="图片导入")
-        self.import_label.pack()
+        section_frame = ttk.LabelFrame(self.scrollable_frame, text="图片导入", padding=(15, 10), style="Custom.TLabelframe")
+        section_frame.pack(fill="x", pady=15, padx=20)
 
-        self.import_button = Button(self.scrollable_frame, text="导入图片", command=self.import_images)
-        self.import_button.pack()
+        # 创建按钮框架
+        button_frame = tk.Frame(section_frame, bg="#f8fafc")
+        button_frame.pack(fill="x", pady=10)
 
-        self.folder_button = Button(self.scrollable_frame, text="导入文件夹", command=self.import_folder)
-        self.folder_button.pack()
+        self.import_button = ttk.Button(button_frame, text="导入图片", command=self.import_images, style="Accent.TButton")
+        self.import_button.pack(side="left", padx=5)
 
-        self.image_listbox = Listbox(self.scrollable_frame, width=50, height=10)
-        self.image_listbox.pack()
+        self.folder_button = ttk.Button(button_frame, text="导入文件夹", command=self.import_folder, style="Accent.TButton")
+        self.folder_button.pack(side="left", padx=5)
+
+        self.image_listbox = Listbox(section_frame, width=50, height=10, relief="solid", borderwidth=1, 
+                                     bg="white", fg="#1e293b", font=("Arial", 10),
+                                     selectbackground="#3b82f6", selectforeground="white")
+        self.image_listbox.pack(pady=10)
         self.image_listbox.bind("<<ListboxSelect>>", self.display_selected_image)
 
         self.image_listbox.drop_target_register(DND_FILES)
         self.image_listbox.dnd_bind('<<Drop>>', self.drop)
 
-        # ---------- 操作模式单选 ----------
-        operate_frame = Frame(self.scrollable_frame)
-        operate_frame.pack(pady=6)
-        Radiobutton(operate_frame, text="操作文本水印", variable=self.cur_operate,
-                    value="text", command=self._on_operate_change).pack(side="left", padx=10)
-        Radiobutton(operate_frame, text="操作图片水印", variable=self.cur_operate,
-                    value="image", command=self._on_operate_change).pack(side="left", padx=10)
-        
-        
+        operate_frame = ttk.Frame(section_frame)
+        operate_frame.pack(pady=10)
+        ttk.Radiobutton(operate_frame, text="操作文本水印", variable=self.cur_operate,
+                        value="text", command=self._on_operate_change, style="TRadiobutton").pack(side="left", padx=15)
+        ttk.Radiobutton(operate_frame, text="操作图片水印", variable=self.cur_operate,
+                        value="image", command=self._on_operate_change, style="TRadiobutton").pack(side="left", padx=15)
 
     # -------------------- 3. 文本水印 --------------------
     def _build_text_watermark(self):
-        self.watermark_label = Label(self.scrollable_frame, text="文本水印设置")
-        self.watermark_label.pack()
+         
+        # 创建一个容器框架来容纳文本和图片水印设置
+        watermarks_frame = ttk.Frame(self.scrollable_frame)
+        watermarks_frame.pack(fill="x", pady=15, padx=20)
 
-        self.text_label = Label(self.scrollable_frame, text="水印文本：")
-        self.text_label.pack()
+        # 文本水印设置 (改为在左侧显示)
+        section_frame = ttk.LabelFrame(watermarks_frame, text="文本水印设置", padding=(15, 10), style="Custom.TLabelframe")
+        section_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
 
-        self.text_entry = Entry(self.scrollable_frame, width=30)
-        self.text_entry.pack()
+        self.text_label = ttk.Label(section_frame, text="水印文本：")
+        self.text_label.pack(anchor="w", pady=(0, 5))
+
+        self.text_entry = ttk.Entry(section_frame, width=30, font=("Arial", 11))
+        self.text_entry.pack(pady=5)
         self.text_entry.bind("<KeyRelease>", lambda e: self.preview_watermark())
 
-        self.opacity_label = Label(self.scrollable_frame, text="透明度：")
-        self.opacity_label.pack()
+        self.opacity_label = ttk.Label(section_frame, text="透明度：")
+        self.opacity_label.pack(anchor="w", pady=(10, 5))
 
-        self.opacity_scale = Scale(self.scrollable_frame, from_=0, to=100, orient=HORIZONTAL,
-                           command=lambda v: self.preview_watermark())
+        self.opacity_scale = ttk.Scale(section_frame, from_=0, to=100, orient=HORIZONTAL,
+                                        command=lambda v: self.preview_watermark())
         self.opacity_scale.set(50)
-        self.opacity_scale.pack()
+        self.opacity_scale.pack(fill="x", pady=5)
 
-        # 字体
-        self.font_label = Label(self.scrollable_frame, text="字体：")
-        self.font_label.pack()
-
-        self.font_var = StringVar()
-        #self.font_option = OptionMenu(self.scrollable_frame, self.font_var, *self.get_system_fonts())
-        self.font_option = OptionMenu(self.scrollable_frame, self.font_var, *self.get_system_fonts(), command=lambda _: self.preview_watermark())
-        self.font_option.pack()
+        self.font_label = ttk.Label(section_frame, text="字体：")
+        self.font_label.pack(anchor="w", pady=(10, 5))
 
         self.font_var = StringVar(value=self.get_system_fonts()[0])
+        self.font_option = ttk.Combobox(section_frame, textvariable=self.font_var,
+                                         values=self.get_system_fonts(), state="readonly", font=("Arial", 10))
+        self.font_option.pack(pady=5)
+        self.font_option.bind("<<ComboboxSelected>>", lambda _: self.preview_watermark())
 
-        # 字号
-        self.font_size_label = Label(self.scrollable_frame, text="字号：")
-        self.font_size_label.pack()
+        self.font_size_label = ttk.Label(section_frame, text="字号：")
+        self.font_size_label.pack(anchor="w", pady=(10, 5))
+
         self.font_size_var = StringVar(value="20")
-        self.font_size_entry = Entry(self.scrollable_frame, textvariable=self.font_size_var, width=5)
-        self.font_size_entry.pack()
+        self.font_size_entry = ttk.Entry(section_frame, textvariable=self.font_size_var, width=8, font=("Arial", 11))
+        self.font_size_entry.pack(pady=5)
         self.font_size_entry.bind("<KeyRelease>", lambda e: self.preview_watermark())
 
 
         # 样式
+        style_frame = tk.Frame(section_frame, bg="#f8fafc")
+        style_frame.pack(anchor="w", pady=10)
+        
         self.bold_var = IntVar()
-        self.bold_checkbox = Checkbutton(self.scrollable_frame, text="粗体", variable=self.bold_var, command=self.preview_watermark)
-        self.bold_checkbox.pack()
+        self.bold_checkbox = Checkbutton(style_frame, text="粗体", variable=self.bold_var, command=self.preview_watermark, 
+                                         bg="#f8fafc", activebackground="#e2e8f0", fg="#1e293b", selectcolor="white")
+        self.bold_checkbox.pack(side="left", padx=(0, 15))
 
         self.italic_var = IntVar()
-        self.italic_checkbox = Checkbutton(self.scrollable_frame, text="斜体", variable=self.italic_var, command=self.preview_watermark)
-        self.italic_checkbox.pack()
+        self.italic_checkbox = Checkbutton(style_frame, text="斜体", variable=self.italic_var, command=self.preview_watermark,
+                                           bg="#f8fafc", activebackground="#e2e8f0", fg="#1e293b", selectcolor="white")
+        self.italic_checkbox.pack(side="left")
 
         # 颜色
-        self.color_button = Button(self.scrollable_frame, text="选择字体颜色", command=self.choose_color)
-        self.color_button.pack()
-
-        self.color_label = Label(self.scrollable_frame, text="字体颜色：#FFFFFF")
-        self.color_label.pack()
+        color_frame = tk.Frame(section_frame, bg="#f8fafc")
+        color_frame.pack(anchor="w", pady=10)
+        
+        self.color_button = ttk.Button(color_frame, text="选择字体颜色", command=self.choose_color)
+        self.color_button.pack(side="left", padx=(0, 10))
+        
+        self.color_label = ttk.Label(color_frame, text="字体颜色：#FFFFFF")
+        self.color_label.pack(side="left")
 
         # 特效
+        effect_frame = tk.Frame(section_frame, bg="#f8fafc")
+        effect_frame.pack(anchor="w", pady=10)
+        
         self.shadow_var = IntVar()
-        self.shadow_checkbox = Checkbutton(self.scrollable_frame, text="添加阴影", variable=self.shadow_var, command=self.preview_watermark)
-        self.shadow_checkbox.pack()
+        self.shadow_checkbox = Checkbutton(effect_frame, text="添加阴影", variable=self.shadow_var, command=self.preview_watermark,
+                                           bg="#f8fafc", activebackground="#e2e8f0", fg="#1e293b", selectcolor="white")
+        self.shadow_checkbox.pack(side="left", padx=(0, 15))
 
         self.stroke_var = IntVar()
-        self.stroke_checkbox = Checkbutton(self.scrollable_frame, text="添加描边", variable=self.stroke_var, command=self.preview_watermark)
-        self.stroke_checkbox.pack()
+        self.stroke_checkbox = Checkbutton(effect_frame, text="添加描边", variable=self.stroke_var, command=self.preview_watermark,
+                                           bg="#f8fafc", activebackground="#e2e8f0", fg="#1e293b", selectcolor="white")
+        self.stroke_checkbox.pack(side="left")
 
          # ====== 新增：文本旋转 ======
-        rot_frame = tk.Frame(self.scrollable_frame)
-        rot_frame.pack()
-        tk.Label(rot_frame, text="旋转角度：").pack(side=tk.LEFT)
+        rot_frame = tk.Frame(section_frame, bg="#f8fafc")
+        rot_frame.pack(anchor="w", pady=10)
+        tk.Label(rot_frame, text="旋转角度：", bg="#f8fafc", fg="#1e293b").pack(side=tk.LEFT)
         self.text_rot_spin = ttk.Spinbox(
             rot_frame,
             from_=-360, to=360, increment=0.1,
             textvariable=self.text_rotate,
-            width=6,
+            width=8,
             command=self.preview_watermark
         )
-        self.text_rot_spin.pack(side=tk.LEFT)
+        self.text_rot_spin.pack(side=tk.LEFT, padx=(5, 0))
         self.text_rotate.trace_add("write", lambda *_: self.preview_watermark())
         # =================================
 
-        # -------------------- 4. 图片水印 --------------------
+    # -------------------- 4. 图片水印 --------------------
     def _build_image_watermark(self):
-        self.watermark_image_label = Label(self.scrollable_frame, text="图片水印")
-        self.watermark_image_label.pack()
+        # 图片水印设置 (改为在右侧显示)
+        watermarks_frame = self.scrollable_frame.winfo_children()[-1]  # 获取刚刚创建的容器框架
+        section_frame = ttk.LabelFrame(watermarks_frame, text="图片水印设置", padding=(15, 10), style="Custom.TLabelframe")
+        section_frame.pack(side="right", fill="both", expand=True, padx=(10, 0))
 
-        self.import_watermark_button = Button(self.scrollable_frame, text="导入图片水印", command=self.import_watermark_image)
-        self.import_watermark_button.pack()
+        self.import_watermark_button = ttk.Button(section_frame, text="导入图片水印", command=self.import_watermark_image, style="Accent.TButton")
+        self.import_watermark_button.pack(pady=10)
 
-        self.scale_label = Label(self.scrollable_frame, text="水印缩放：")
-        self.scale_label.pack()
+        self.scale_label = ttk.Label(section_frame, text="水印缩放：")
+        self.scale_label.pack(anchor="w", pady=(10, 5))
 
-        self.scale_slider = Scale(self.scrollable_frame, from_=0.01, to=2.0, orient=HORIZONTAL, resolution=0.1, command=lambda v: self.scale_watermark_image(float(v)))
+        self.scale_slider = Scale(section_frame, from_=0.01, to=2.0, orient=HORIZONTAL, resolution=0.1, command=lambda v: self.scale_watermark_image(float(v)),
+                                  bg="#f8fafc", activebackground="#3b82f6", troughcolor="#cbd5e1", highlightthickness=0, length=200)
         self.scale_slider.set(1.0)
-        self.scale_slider.pack()
+        self.scale_slider.pack(fill="x", pady=5)
 
-        self.opacity_label = Label(self.scrollable_frame, text="水印透明度：")
-        self.opacity_label.pack()
+        self.opacity_label = Label(section_frame, text="水印透明度：", bg="#f8fafc", fg="#1e293b")
+        self.opacity_label.pack(anchor="w", pady=(10, 5))
 
-        self.opacity_slider = Scale(self.scrollable_frame, from_=0, to=100, orient=HORIZONTAL, 
-                               command=lambda v: self.set_watermark_opacity(int(v)/100.0 ))
+        self.opacity_slider = Scale(section_frame, from_=0, to=100, orient=HORIZONTAL, 
+                               command=lambda v: self.set_watermark_opacity(int(v)/100.0 ),
+                               bg="#f8fafc", activebackground="#3b82f6", troughcolor="#cbd5e1", highlightthickness=0, length=200)
         self.opacity_slider.set(100)  
-        self.opacity_slider.pack()
+        self.opacity_slider.pack(fill="x", pady=5)
 
-        # ====== 新增：图片旋转 ======
-        rot_frame = tk.Frame(self.scrollable_frame)
-        rot_frame.pack()
-        tk.Label(rot_frame, text="旋转角度：").pack(side=tk.LEFT)
+        # ====== 新增：图片旋转 ====== 
+        rot_frame = tk.Frame(section_frame, bg="#f8fafc")
+        rot_frame.pack(anchor="w", pady=10)
+        tk.Label(rot_frame, text="旋转角度：", bg="#f8fafc", fg="#1e293b").pack(side=tk.LEFT)
         self.image_rot_spin = ttk.Spinbox(
             rot_frame,
             from_=-360, to=360, increment=0.1,
             textvariable=self.image_rotate,
-            width=6,
+            width=8,
             command=self.preview_watermark
         )
-        self.image_rot_spin.pack(side=tk.LEFT)
+        self.image_rot_spin.pack(side=tk.LEFT, padx=(5, 0))
         self.image_rotate.trace_add("write", lambda *_: self.preview_watermark())
         # =================================
 
 
     # -------------------- 5. 导出 --------------------
     def _build_export(self):
-        self.export_label = Label(self.scrollable_frame, text="图片导出")
-        self.export_label.pack()
+        section_frame = ttk.LabelFrame(self.scrollable_frame, text="图片导出", padding=(15, 10), style="Custom.TLabelframe")
+        section_frame.pack(fill="x", pady=15, padx=20)
 
-        self.export_folder_label = Label(self.scrollable_frame, text="导出文件夹：")
-        self.export_folder_label.pack()
+        self.export_folder_label = ttk.Label(section_frame, text="导出文件夹：")
+        self.export_folder_label.pack(anchor="w", pady=(0, 5))
 
-        self.export_folder_entry = Entry(self.scrollable_frame, width=50)
-        self.export_folder_entry.pack()
+        self.export_folder_entry = ttk.Entry(section_frame, width=50, font=("Arial", 11))
+        self.export_folder_entry.pack(pady=5)
 
-        self.browse_button = Button(self.scrollable_frame, text="选择文件夹", command=self.select_export_folder)
-        self.browse_button.pack()
+        self.browse_button = ttk.Button(section_frame, text="选择文件夹", command=self.select_export_folder)
+        self.browse_button.pack(pady=10)
 
-        self.prefix_label = Label(self.scrollable_frame, text="文件名前缀：")
-        self.prefix_label.pack()
+        self.prefix_label = ttk.Label(section_frame, text="文件名前缀：")
+        self.prefix_label.pack(anchor="w", pady=(10, 5))
 
-        self.prefix_var = StringVar()
-        self.prefix_entry = Entry(self.scrollable_frame, textvariable=self.prefix_var, width=50)
-        self.prefix_entry.pack()
+        self.prefix_entry = ttk.Entry(section_frame, textvariable=self.prefix_var, width=50, font=("Arial", 11))
+        self.prefix_entry.pack(pady=5)
 
-        self.suffix_label = Label(self.scrollable_frame, text="文件名后缀：")
-        self.suffix_label.pack()
+        self.suffix_label = ttk.Label(section_frame, text="文件名后缀：")
+        self.suffix_label.pack(anchor="w", pady=(10, 5))
 
-        self.suffix_var = StringVar()
-        self.suffix_entry = Entry(self.scrollable_frame, textvariable=self.suffix_var, width=50)
-        self.suffix_entry.pack()
+        self.suffix_entry = ttk.Entry(section_frame, textvariable=self.suffix_var, width=50, font=("Arial", 11))
+        self.suffix_entry.pack(pady=5)
 
-        # 添加输出格式选择
-        self.format_label = Label(self.scrollable_frame, text="输出格式：")
-        self.format_label.pack()
+        self.export_button = ttk.Button(section_frame, text="导出图片", command=self.export_images, style="Export.TButton")
+        self.export_button.pack(pady=15)
 
-        self.format_var = StringVar(value="JPEG")
-        self.jpeg_radio = Button(self.scrollable_frame, text="JPEG", command=lambda: self.set_format("JPEG"))
-        self.jpeg_radio.pack()
-
-        self.png_radio = Button(self.scrollable_frame, text="PNG", command=lambda: self.set_format("PNG"))
-        self.png_radio.pack()
-
-        self.export_button = Button(self.scrollable_frame, text="导出图片", command=self.export_images)
-        self.export_button.pack()
     # -------------------- 6. 预览 --------------------
     def _build_preview(self):
-        self.canvas = Canvas(self.scrollable_frame, width=400, height=400, bg="gray")
-        self.canvas.pack()
+        # 在右侧界面创建预览区域
+       
+        self.preview_canvas= Canvas(
+            self.preview_frame,           # ← 关键：放在右侧容器
+            width=420, height=420,
+            bg="#ffffff",
+            highlightthickness=2, 
+            highlightbackground="#94a3b8"
+        )
+        self.preview_canvas.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # 添加标题标签
+        preview_title = tk.Label(self.preview_frame, text="图片预览", bg="#f1f5f9", font=("Arial", 14, "bold"), fg="#1e293b")
+        preview_title.pack()
 
     # -------------------- 7. 布局 --------------------
     def _build_layout(self):
-        self.layout_label = Label(self.scrollable_frame, text="水印布局")
-        self.layout_label.pack()
+        layout_frame = ttk.LabelFrame(self.scrollable_frame, text="水印布局", padding=(15, 10), style="Custom.TLabelframe")
+        layout_frame.pack(fill="x", pady=15, padx=20)
+        
+        button_frame = ttk.Frame(layout_frame)
+        button_frame.pack()
+        
         for label, position in self.layout_buttons.items():
-            Button(self.scrollable_frame, text=label, command=lambda pos=position: self.set_watermark_position(pos)).pack()
-
-        self.canvas.bind("<Button-1>", self.on_watermark_press)
-        self.canvas.bind("<B1-Motion>", self.on_watermark_move)
-        self.canvas.bind("<ButtonRelease-1>", self.on_watermark_release)
-
-       
-        self.drag_data = None
-        self.watermark_id = None
-
-        self.tpl_combo = ttk.Combobox(self.scrollable_frame, state="readonly", width=20)
-        self.tpl_combo.pack(pady=5)
-        self.tpl_combo.bind("<<ComboboxSelected>>", self.on_template_selected)
+            btn = Button(button_frame, text=label, command=lambda pos=position: self.set_watermark_position(pos),
+                         bg="#e2e8f0", activebackground="#94a3b8", relief="raised", bd=1, 
+                         fg="#1e293b", font=("Arial", 9))
+            btn.pack(side=tk.LEFT, padx=3, pady=5)
+            # 添加悬停效果
+            btn.bind("<Enter>", lambda e: e.widget.config(bg="#cbd5e1"))
+            btn.bind("<Leave>", lambda e: e.widget.config(bg="#e2e8f0"))
 
     # -------------------- 8. 模板 --------------------
     def _build_template(self):
-        self.template_label = Label(self.scrollable_frame, text="水印模板管理")
-        self.template_label.pack()
+        
+        template_frame = ttk.LabelFrame(self.scrollable_frame, text="水印模板管理", padding=(15, 10), style="Custom.TLabelframe")
+        template_frame.pack(fill="x", pady=15, padx=20)
 
-        self.save_template_button = Button(self.scrollable_frame, text="保存模板", command=self.save_template)
-        self.save_template_button.pack()
+        tpl_select_frame = ttk.Frame(template_frame)
+        tpl_select_frame.pack(fill="x", pady=10)
+        
+        ttk.Label(tpl_select_frame, text="模板加载：").pack(side="left")
+        self.tpl_combo = ttk.Combobox(tpl_select_frame, state="readonly", width=25, font=("Arial", 10))
+        self.tpl_combo.pack(side="left", padx=10)
+        self.tpl_combo.bind("<<ComboboxSelected>>", self.on_template_selected)
 
-        self.delete_template_button = Button(self.scrollable_frame, text="删除模板", command=self.delete_template)
-        self.delete_template_button.pack()
+        button_frame = tk.Frame(template_frame, bg="#f8fafc")
+        button_frame.pack(fill="x", pady=10)
+
+        self.save_template_button = Button(button_frame, text="保存模板", command=self.save_template,
+                                           bg="#10b981", fg="white", activebackground="#059669", 
+                                           relief="flat", font=("Arial", 10, "bold"),
+                                           padx=10, pady=5)
+        self.save_template_button.pack(side=tk.LEFT, padx=5)
+
+        self.delete_template_button = Button(button_frame, text="删除模板", command=self.delete_template,
+                                             bg="#ef4444", fg="white", activebackground="#dc2626", 
+                                             relief="flat", font=("Arial", 10, "bold"),
+                                             padx=10, pady=5)
+        self.delete_template_button.pack(side=tk.LEFT, padx=5)
 
     # -------------------- 9. 事件绑定 --------------------
     def _bind_events(self):
@@ -326,9 +399,9 @@ class WatermarkApp:
         self.image_listbox.drop_target_register(DND_FILES)
         self.image_listbox.dnd_bind('<<Drop>>', self.drop)
 
-        self.canvas.bind("<Button-1>", self.on_watermark_press)
-        self.canvas.bind("<B1-Motion>", self.on_watermark_move)
-        self.canvas.bind("<ButtonRelease-1>", self.on_watermark_release)
+        self.preview_canvas.bind("<Button-1>", self.on_watermark_press)
+        self.preview_canvas.bind("<B1-Motion>", self.on_watermark_move)
+        self.preview_canvas.bind("<ButtonRelease-1>", self.on_watermark_release)
 
     def get_system_fonts(self):
         fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
@@ -421,14 +494,26 @@ class WatermarkApp:
             self.preview_watermark()
 
     def display_image(self, image):
-        image.thumbnail((400, 400))
-        photo = ImageTk.PhotoImage(image)
-        self.canvas.image = photo
-        self.canvas.create_image(200, 200, image=photo)
+        max_w = self.PREVIEW_MAX_W
+        max_h = self.PREVIEW_MAX_H
+        scale = min(max_w / image.width, max_h / image.height)
+        if scale < 1.0:
+            image = image.resize((int(image.width * scale),
+                                int(image.height * scale)), Image.LANCZOS)
 
-    # def set_watermark_position(self, position):
-    #     self.watermark_position = position
-    #     self.preview_watermark()
+        # 居中偏移
+        self.offset_x = (max_w - image.width) // 2
+        self.offset_y = (max_h - image.height) // 2
+
+        photo = ImageTk.PhotoImage(image)
+        self.preview_canvas.delete("all")
+        self.preview_canvas.create_image(self.offset_x, self.offset_y,
+                                        anchor='nw', image=photo)
+        self.preview_canvas.image = photo          # 防回收
+
+        # 边框（可选）
+        
+
     def set_watermark_position(self, position):
         if self.cur_operate.get() == "text":
             self.watermark_position = position
@@ -570,8 +655,8 @@ class WatermarkApp:
         # 复制底图
         self.watermarked_image = self.current_image.copy()
 
-        scale = min(400 / self.watermarked_image.width,
-                    400 / self.watermarked_image.height)
+        scale = min(self.PREVIEW_MAX_W / self.watermarked_image.width,
+                    self.PREVIEW_MAX_H / self.watermarked_image.height)
         self.preview_scale = scale   
 
 
@@ -714,25 +799,27 @@ class WatermarkApp:
         self.display_image(self.watermarked_image)
 
             
-    def display_image(self, image):
-        max_width = 400
-        max_height = 400
-        if image.width > max_width or image.height > max_height:
-            scale = min(max_width / image.width, max_height / image.height)
-            image = image.resize((int(image.width * scale), int(image.height * scale)), Image.ANTIALIAS)
-        else:
-            scale = 1.0
+    # def display_image(self, image):
+    #     max_width = 400
+    #     max_height = 400
+    #     if image.width > max_width or image.height > max_height:
+    #         scale = min(max_width / image.width, max_height / image.height)
+    #         image = image.resize((int(image.width * scale), int(image.height * scale)), Image.ANTIALIAS)
+    #     else:
+    #         scale = 1.0
 
-        # 居中偏移量
-        self.offset_x = (400 - image.width) // 2
-        self.offset_y = (400 - image.height) // 2
+    #     # 居中偏移量
+    #     self.offset_x = (400 - image.width) // 2
+    #     self.offset_y = (400 - image.height) // 2
 
-        photo = ImageTk.PhotoImage(image)
-        self.canvas.image = photo
-        # 用偏移量放置
-        self.canvas.create_image(self.offset_x, self.offset_y, anchor='nw', image=photo)
+    #     photo = ImageTk.PhotoImage(image)
+    #     self.preview_canvas.image = photo  # 保持引用防止被垃圾回收
+    #     self.preview_canvas.delete("all")  # 清除之前的图像
+    #     # 用偏移量放置
+    #     self.preview_canvas.create_image(200, 200, image=photo)
         
-   
+    #     # 添加边框
+    #     self.preview_canvas.create_rectangle(1, 1, 399, 399, outline="#94a3b8", width=2)
 
     def set_format(self, format):
         self.format_var.set(format)
@@ -925,7 +1012,7 @@ class WatermarkApp:
         # ① 先记录起点，否则 on_watermark_move 里没有 drag_data
         self.drag_data = (event.x, event.y)
 
-        # ② 仅做“点中水印”高亮提示，不再提前 return
+        # ② 仅做"点中水印"高亮提示，不再提前 return
         click_x, click_y = event.x, event.y
         if self.cur_operate.get() == "text" and hasattr(self, 'text_bbox'):
             x1, y1, x2, y2 = self.text_bbox
@@ -955,13 +1042,13 @@ class WatermarkApp:
             # 只移动当前选中的水印
             if self.cur_operate.get() == "text":
                 self.watermark_position = (
-                    max(0, min(1, self.watermark_position[0] + dx / self.canvas.winfo_width())),
-                    max(0, min(1, self.watermark_position[1] + dy / self.canvas.winfo_height()))
+                    max(0, min(1, self.watermark_position[0] + dx / self.preview_canvas.winfo_width())),
+                    max(0, min(1, self.watermark_position[1] + dy / self.preview_canvas.winfo_height()))
                 )
             else:  # 图片水印
                 self.image_watermark_pos = (
-                    max(0, min(1, self.image_watermark_pos[0] + dx / self.canvas.winfo_width())),
-                    max(0, min(1, self.image_watermark_pos[1] + dy / self.canvas.winfo_height()))
+                    max(0, min(1, self.image_watermark_pos[0] + dx / self.preview_canvas.winfo_width())),
+                    max(0, min(1, self.image_watermark_pos[1] + dy / self.preview_canvas.winfo_height()))
                 )
 
             self.preview_watermark()
@@ -985,5 +1072,24 @@ class WatermarkApp:
 
 if __name__ == "__main__":
     root = TkinterDnD.Tk()  
+    # 设置样式
+    style = ttk.Style()
+    style.configure("Custom.TLabelframe", background="#f8fafc", foreground="#1e293b", 
+                    font=("Arial", 11, "bold"), relief="groove", borderwidth=2)
+    style.configure("Accent.TButton", background="#3b82f6", foreground="white", 
+                    font=("Arial", 10, "bold"))
+    style.map("Accent.TButton", background=[("active", "#2563eb")])
+    style.configure("Export.TButton", background="#8b5cf6", foreground="white", 
+                    font=("Arial", 10, "bold"))
+    style.map("Export.TButton", background=[("active", "#7c3aed")])
+    style.configure("TRadiobutton", background="#f8fafc", foreground="#1e293b")
+    
+    # 设置按钮样式
+    root.option_add("*Button.Font", "Arial 10")
+    root.option_add("*Button.Background", "#e2e8f0")
+    root.option_add("*Button.Foreground", "#1e293b")
+    root.option_add("*Button.Relief", "raised")
+    root.option_add("*Button.BorderWidth", 1)
+    
     app = WatermarkApp(root)
     root.mainloop()
