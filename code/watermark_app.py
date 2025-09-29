@@ -1148,3 +1148,28 @@ if __name__ == "__main__":
     
     app = WatermarkApp(root)
     root.mainloop()
+
+def main():
+    """程序入口函数"""
+    root = TkinterDnD.Tk()  
+    # 设置样式
+    style = ttk.Style()
+    style.configure("Custom.TLabelframe", background="#f8fafc", foreground="#1e293b", 
+                    font=("Arial", 11, "bold"), relief="groove", borderwidth=2)
+    style.configure("Accent.TButton", background="#3b82f6", foreground="white", 
+                    font=("Arial", 10, "bold"))
+    style.map("Accent.TButton", background=[("active", "#2563eb")])
+    style.configure("Export.TButton", background="#8b5cf6", foreground="white", 
+                    font=("Arial", 10, "bold"))
+    style.map("Export.TButton", background=[("active", "#7c3aed")])
+    style.configure("TRadiobutton", background="#f8fafc", foreground="#1e293b")
+    
+    # 设置按钮样式
+    root.option_add("*Button.Font", "Arial 10")
+    root.option_add("*Button.Background", "#e2e8f0")
+    root.option_add("*Button.Foreground", "#1e293b")
+    root.option_add("*Button.Relief", "raised")
+    root.option_add("*Button.BorderWidth", 1)
+    
+    app = WatermarkApp(root)
+    root.mainloop()
