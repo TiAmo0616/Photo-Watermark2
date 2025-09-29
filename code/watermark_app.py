@@ -442,51 +442,78 @@ class WatermarkApp:
         font_files = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
         font_paths = {os.path.basename(font).split('.')[0]: font for font in font_files}
 
-        # 构造字体文件名
+        # 首先尝试查找专门的粗体/斜体字体文件
+        font_file_name = font_name
         if bold and italic:
-            font_file_name = f"{font_name}-bold-italic"
+            # 尝试多种可能的粗体斜体命名方式
+            candidates = [
+                f"{font_name}-bold-italic",
+                f"{font_name}-bolditalic",
+                f"{font_name}-BoldItalic",
+                f"{font_name}BI",
+                f"{font_name}-BI"
+            ]
+            for candidate in candidates:
+                if candidate in font_paths:
+                    return font_paths[candidate],1
         elif bold:
-            font_file_name = f"{font_name}-bold"
+            # 尝试多种可能的粗体命名方式
+            candidates = [
+                f"{font_name}-bold",
+                f"{font_name}-Bold",
+                f"{font_name}B",
+                f"{font_name}-B",
+                f"{font_name}b"
+            ]
+            for candidate in candidates:
+                if candidate in font_paths:
+                    return font_paths[candidate],1
         elif italic:
-            font_file_name = f"{font_name}-italic"
-        else:
-            font_file_name = font_name
+            # 尝试多种可能的斜体命名方式
+            candidates = [
+                f"{font_name}-italic",
+                f"{font_name}-Italic",
+                f"{font_name}I",
+                f"{font_name}-I",
+                f"{font_name}i"
+            ]
+            for candidate in candidates:
+                if candidate in font_paths:
+                    return font_paths[candidate],1
 
-        # 检查字体文件是否存在
-        font_path = font_paths.get(font_file_name)
-        if not font_path:
-            # 如果找不到字体文件，弹出警告框通知用户
-            if bold and italic:
-                messagebox.showwarning("警告", f"当前字体不支持粗体和斜体样式。")
-            elif bold:
-                messagebox.showwarning("警告", f"当前字体不支持粗体样式。")
-            elif italic:
-                messagebox.showwarning("警告", f"当前字体不支持斜体样式。")
-            
-            # 自动取消用户对加粗或斜体的勾选
-            if bold:
-                self.bold_var.set(0)
-            if italic:
-                self.italic_var.set(0)
-            
-            # 重新构造字体文件名
-            if bold and italic:
-                font_file_name = f"{font_name}-italic"
-            elif bold:
-                font_file_name = font_name
-            elif italic:
-                font_file_name = f"{font_name}-bold"
-            else:
-                font_file_name = font_name
+        # 如果没有找到专门的样式字体文件，返回基础字体
+        # PIL/Pillow 会在绘制时处理粗体和斜体样式
+        return font_paths.get(font_name),0
 
-            # 再次检查字体文件是否存在
-            # font_path = font_paths.get(font_file_name)
-            # if not font_path:
-            #     messagebox.showerror("错误", "无法找到任何支持的字体文件，请确保系统中安装了相应的字体。")
-            #     return None
-
-        return font_path
-
+    def get_font(self, font_name, font_size, bold=False, italic=False):
+        """
+        获取字体，支持粗体和斜体
+        """
+        font_path,_ = self.get_font_path(font_name, bold, italic)
+        
+        if font_path:
+            try:
+                if _ == 0:
+                    if bold:
+                         messagebox.showwarning("提示", "该字体暂不支持加粗！")
+                         self.bold_var.set(0)
+                    elif italic:
+                         messagebox.showwarning("提示", "该字体暂不支持斜体！")
+                         self.italic_var.set(0)
+                # 使用指定的字体文件
+                font = ImageFont.truetype(font_path, font_size)
+                return font
+            except Exception as e:
+                print(f"加载字体失败: {e}")
+        
+        # 如果特定字体加载失败，尝试使用默认字体并设置样式
+        try:
+            # 尝试使用默认字体
+            font = ImageFont.load_default()
+            return font
+        except:
+            # 最后的备选方案
+            return ImageFont.load_default()
 
     def import_images(self):
         filetypes = [("图片文件", "*.jpg;*.jpeg;*.png;*.bmp;*.tiff")]
@@ -722,16 +749,11 @@ class WatermarkApp:
             stroke = self.stroke_var.get()
             angle = self.text_rotate.get()
 
-            # 获取字体路径
-            font_path = self.get_font_path(font_name, bold, italic)
-            if font_path is None:
-                return  # 如果字体路径无效，直接返回
-
-            # 加载字体
+            # 获取字体
             try:
-                font = ImageFont.truetype(font_path, font_size)
-            except IOError:
-                messagebox.showerror("错误", f"无法加载字体文件：{font_path}")
+                font = self.get_font(font_name, font_size, bold, italic)
+            except Exception as e:
+                messagebox.showerror("错误", f"无法加载字体: {str(e)}")
                 return
 
             # draw = ImageDraw.Draw(self.watermarked_image)
@@ -943,13 +965,10 @@ class WatermarkApp:
         stroke = self.stroke_var.get()
         text_angle = self.text_rotate.get()          # 新增：文字旋转角度
 
-        font_path = self.get_font_path(font_name, bold, italic)
-        if font_path is None:
-            return
         try:
-            font = ImageFont.truetype(font_path, font_size)
-        except IOError:
-            messagebox.showerror("错误", f"无法加载字体文件：{font_path}")
+            font = self.get_font(font_name, font_size, bold, italic)
+        except Exception as e:
+            messagebox.showerror("错误", f"无法加载字体: {str(e)}")
             return
 
         # -------------- 图片水印参数 --------------
