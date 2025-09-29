@@ -1,1 +1,1 @@
-watermarked_image
+color
