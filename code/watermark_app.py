@@ -315,6 +315,16 @@ class WatermarkApp:
         self.browse_button = ttk.Button(section_frame, text="选择文件夹", command=self.select_export_folder)
         self.browse_button.pack(pady=10)
 
+        # 添加格式选择
+        self.format_label = ttk.Label(section_frame, text="导出格式：")
+        self.format_label.pack(anchor="w", pady=(10, 5))
+
+        format_frame = ttk.Frame(section_frame)
+        format_frame.pack(anchor="w", pady=5)
+
+        ttk.Radiobutton(format_frame, text="JPEG", variable=self.format_var, value="JPEG").pack(side="left", padx=(0, 15))
+        ttk.Radiobutton(format_frame, text="PNG", variable=self.format_var, value="PNG").pack(side="left")
+
         self.prefix_label = ttk.Label(section_frame, text="文件名前缀：")
         self.prefix_label.pack(anchor="w", pady=(10, 5))
 
