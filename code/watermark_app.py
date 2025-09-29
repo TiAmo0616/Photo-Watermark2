@@ -4,6 +4,7 @@ import io
 import os
 import json
 from tkinter import Radiobutton, Tk, Label, Button, Listbox, Entry, Scale, HORIZONTAL, filedialog, Canvas, StringVar, messagebox
+import tkinter as tk
 from PIL import Image, ImageDraw, ImageFont, ImageTk, ImageOps
 import numpy as np
 from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -93,6 +94,9 @@ class WatermarkApp:
 
         self.cur_operate = StringVar(value="text")   # 当前操作模式：text / image
 
+        self.text_rotate  = tk.DoubleVar(value=0.0)
+        self.image_rotate = tk.DoubleVar(value=0.0)
+
     # -------------------- 2. 图片导入 --------------------
     def _build_image_import(self):
         self.import_label = Label(self.scrollable_frame, text="图片导入")
@@ -118,6 +122,8 @@ class WatermarkApp:
                     value="text", command=self._on_operate_change).pack(side="left", padx=10)
         Radiobutton(operate_frame, text="操作图片水印", variable=self.cur_operate,
                     value="image", command=self._on_operate_change).pack(side="left", padx=10)
+        
+        
 
     # -------------------- 3. 文本水印 --------------------
     def _build_text_watermark(self):
@@ -184,6 +190,21 @@ class WatermarkApp:
         self.stroke_checkbox = Checkbutton(self.scrollable_frame, text="添加描边", variable=self.stroke_var, command=self.preview_watermark)
         self.stroke_checkbox.pack()
 
+         # ====== 新增：文本旋转 ======
+        rot_frame = tk.Frame(self.scrollable_frame)
+        rot_frame.pack()
+        tk.Label(rot_frame, text="旋转角度：").pack(side=tk.LEFT)
+        self.text_rot_spin = ttk.Spinbox(
+            rot_frame,
+            from_=-360, to=360, increment=0.1,
+            textvariable=self.text_rotate,
+            width=6,
+            command=self.preview_watermark
+        )
+        self.text_rot_spin.pack(side=tk.LEFT)
+        self.text_rotate.trace_add("write", lambda *_: self.preview_watermark())
+        # =================================
+
         # -------------------- 4. 图片水印 --------------------
     def _build_image_watermark(self):
         self.watermark_image_label = Label(self.scrollable_frame, text="图片水印")
@@ -206,6 +227,22 @@ class WatermarkApp:
                                command=lambda v: self.set_watermark_opacity(int(v)/100.0 ))
         self.opacity_slider.set(100)  
         self.opacity_slider.pack()
+
+        # ====== 新增：图片旋转 ======
+        rot_frame = tk.Frame(self.scrollable_frame)
+        rot_frame.pack()
+        tk.Label(rot_frame, text="旋转角度：").pack(side=tk.LEFT)
+        self.image_rot_spin = ttk.Spinbox(
+            rot_frame,
+            from_=-360, to=360, increment=0.1,
+            textvariable=self.image_rotate,
+            width=6,
+            command=self.preview_watermark
+        )
+        self.image_rot_spin.pack(side=tk.LEFT)
+        self.image_rotate.trace_add("write", lambda *_: self.preview_watermark())
+        # =================================
+
 
     # -------------------- 5. 导出 --------------------
     def _build_export(self):
@@ -447,6 +484,9 @@ class WatermarkApp:
         self.scale_slider.set(self.watermark_scale)
         self.opacity_slider.set(self.watermark_opacity * 100)
 
+        self.text_rotate.set(tpl.get("text_rotate", 0.0))
+        self.image_rotate.set(tpl.get("image_rotate", 0.0))
+
         self.curr_tpl_idx = idx
         self.preview_watermark()
 
@@ -470,6 +510,8 @@ class WatermarkApp:
             "image_scale": self.watermark_scale,
             "image_opacity": self.watermark_opacity,
             "image_pos": self.image_watermark_pos,
+            "text_rotate": self.text_rotate.get(),      # 新增
+            "image_rotate": self.image_rotate.get(),     # 新增
             "type": "full"          # 标记为新格式，方便以后扩展
         }
         # 如果当前有水印图，就内嵌
@@ -544,6 +586,7 @@ class WatermarkApp:
             color = self.color_label.cget("text").split("：")[1]
             shadow = self.shadow_var.get()
             stroke = self.stroke_var.get()
+            angle = self.text_rotate.get()
 
             # 获取字体路径
             font_path = self.get_font_path(font_name, bold, italic)
@@ -557,7 +600,9 @@ class WatermarkApp:
                 messagebox.showerror("错误", f"无法加载字体文件：{font_path}")
                 return
 
-            draw = ImageDraw.Draw(self.watermarked_image)
+            # draw = ImageDraw.Draw(self.watermarked_image)
+            temp = Image.new("RGBA", self.watermarked_image.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(temp)
             left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
             tw, th = right - left, bottom - top
 
@@ -580,27 +625,34 @@ class WatermarkApp:
             x = int(cx - tw / 2)
             y = int(cy - th / 2 - top)
 
-            text_layer = Image.new("RGBA", self.watermarked_image.size, (255, 255, 255, 0))
-            text_draw = ImageDraw.Draw(text_layer)
+                        # 0. 先准备空白层
+            text_layer = Image.new("RGBA", self.watermarked_image.size, (0, 0, 0, 0))
+            draw = ImageDraw.Draw(text_layer)          # 用 text_layer 画！
 
+            # 1. 阴影 / 描边 / 正文（全部画在 text_layer）
             if shadow:
                 shadow_color = (0, 0, 0, int(255 * 0.5))
-                shadow_offset = (2, 2)
-                text_draw.text((x + shadow_offset[0], y + shadow_offset[1]), text, font=font, fill=shadow_color)
-
+                draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
             if stroke:
                 stroke_color = (0, 0, 0, int(255 * 0.5))
-                stroke_width = 2
-                text_draw.text((x - stroke_width, y - stroke_width), text, font=font, fill=stroke_color)
-                text_draw.text((x + stroke_width, y + stroke_width), text, font=font, fill=stroke_color)
+                for dx, dy in [(-2, -2), (-2, 2), (2, -2), (2, 2)]:
+                    draw.text((x + dx, y + dy), text, font=font, fill=stroke_color)
+            draw.text((x, y), text,
+                      font=font,
+                      fill=(int(color[1:3], 16),
+                            int(color[3:5], 16),
+                            int(color[5:7], 16),
+                            int(255 * opacity)))
 
-            text_draw.text((x, y), text, font=font, fill=(int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), int(255 * opacity)))
+            # 2. 旋转
+            if angle != 0:
+                rot_center = (x + tw // 2, y + th // 2)
+                text_layer = text_layer.rotate(angle, center=rot_center, expand=0)
 
-            self.watermarked_image = Image.alpha_composite(self.watermarked_image.convert("RGBA"), text_layer)
-
-            # 记录文本水印区域（用于点击判断）
-            #self.text_bbox = (x, y, x + tw, y + th)
-            # 记录文本水印区域（缩放后坐标）
+            # 3. 合成
+            self.watermarked_image = Image.alpha_composite(
+                self.watermarked_image.convert("RGBA"), text_layer)
+            
             
             self.text_bbox = (
                 int(x * scale) + self.offset_x,
@@ -609,22 +661,27 @@ class WatermarkApp:
                 int((y + th) * scale) + self.offset_y
             )
 
-        # 如果有图片水印
+        
         # ---------- 图片水印 ----------
+              
         if self.watermark_image:
+            angle = self.image_rotate.get()          # 新增：获取旋转角度
+
             # 1. 缩放
             watermark = self.watermark_image.resize(
                 (int(self.watermark_original_width * self.watermark_scale),
-                int(self.watermark_original_height * self.watermark_scale)),
+                 int(self.watermark_original_height * self.watermark_scale)),
                 Image.LANCZOS)
 
-            # 2. 透明度 → 逐像素乘进原 alpha（关键修复）
+            # 2. 透明度
             transparent_layer = Image.new("RGBA", watermark.size, (255, 255, 255, 0))
             watermark = Image.blend(transparent_layer, watermark, self.watermark_opacity)
-            # 在图片水印处理部分添加：
-            print(f"水印透明度: {self.watermark_opacity}, 类型: {type(self.watermark_opacity)}")
 
-            # 3. 位置计算（用独立坐标）
+            # 3. 旋转（expand=1 保证四角完整）
+            if angle != 0:
+                watermark = watermark.rotate(angle, expand=1)
+
+            # 4. 位置计算（用旋转后的尺寸）
             cx = self.watermarked_image.width * self.image_watermark_pos[0]
             cy = self.watermarked_image.height * self.image_watermark_pos[1]
             margin_x = self.watermarked_image.width * 0.02
@@ -643,10 +700,10 @@ class WatermarkApp:
             x = int(cx - watermark.width / 2)
             y = int(cy - watermark.height / 2)
 
-            # 4. 粘贴
+            # 5. 粘贴
             self.watermarked_image.paste(watermark, (x, y), watermark)
 
-            # 5. 记录预览命中框（缩放+偏移）
+            # 6. 记录预览命中框（缩放+偏移）
             w, h = watermark.size
             self.image_bbox = (
                 int(x * self.preview_scale) + self.offset_x,
@@ -654,7 +711,6 @@ class WatermarkApp:
                 int((x + w) * self.preview_scale) + self.offset_x,
                 int((y + h) * self.preview_scale) + self.offset_y
             )
-                        # 显示图片预览
         self.display_image(self.watermarked_image)
 
             
@@ -716,8 +772,6 @@ class WatermarkApp:
         if self.watermark_image:
             self.watermark_opacity = float(opacity) 
             self.preview_watermark()
-            
-
     def export_images(self):
         export_folder = self.export_folder_entry.get()
         prefix = self.prefix_var.get()
@@ -736,17 +790,18 @@ class WatermarkApp:
             return
 
         # -------------- 文字水印参数 --------------
-        text        = self.text_entry.get()
-        opacity     = self.opacity_scale.get() / 100
-        font_name   = self.font_var.get()
-        font_size   = int(self.font_size_var.get())
-        bold        = self.bold_var.get()
-        italic      = self.italic_var.get()
-        color       = self.color_label.cget("text").split("：")[1]
-        shadow      = self.shadow_var.get()
-        stroke      = self.stroke_var.get()
+        text = self.text_entry.get()
+        opacity = self.opacity_scale.get() / 100
+        font_name = self.font_var.get()
+        font_size = int(self.font_size_var.get())
+        bold = self.bold_var.get()
+        italic = self.italic_var.get()
+        color = self.color_label.cget("text").split("：")[1]
+        shadow = self.shadow_var.get()
+        stroke = self.stroke_var.get()
+        text_angle = self.text_rotate.get()          # 新增：文字旋转角度
 
-        font_path   = self.get_font_path(font_name, bold, italic)
+        font_path = self.get_font_path(font_name, bold, italic)
         if font_path is None:
             return
         try:
@@ -758,9 +813,10 @@ class WatermarkApp:
         # -------------- 图片水印参数 --------------
         has_image_wm = bool(self.watermark_image)
         if has_image_wm:
-            wm_scale    = self.watermark_scale          # 0.1~2.0
-            wm_opacity  = self.watermark_opacity        # 0~1
-            wm_pos      = self.image_watermark_pos      # 独立位置
+            wm_scale = self.watermark_scale
+            wm_opacity = self.watermark_opacity
+            wm_pos = self.image_watermark_pos
+            image_angle = self.image_rotate.get()    # 新增：图片旋转角度
 
         for img_path in self.image_paths:
             img = Image.open(img_path).convert("RGBA")
@@ -768,7 +824,10 @@ class WatermarkApp:
 
             # 1. 绘制文字水印
             if text:
-                draw = ImageDraw.Draw(canvas)
+                # 先画在独立图层上
+                text_layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+                draw = ImageDraw.Draw(text_layer)
+
                 left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
                 tw, th = right - left, bottom - top
 
@@ -788,6 +847,7 @@ class WatermarkApp:
                 x = int(cx - tw / 2)
                 y = int(cy - th / 2 - top)
 
+                # 阴影 / 描边 / 正文
                 if shadow:
                     shadow_color = (0, 0, 0, int(255 * 0.5))
                     draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
@@ -796,17 +856,32 @@ class WatermarkApp:
                     for dx, dy in [(-2, -2), (-2, 2), (2, -2), (2, 2)]:
                         draw.text((x + dx, y + dy), text, font=font, fill=stroke_color)
                 draw.text((x, y), text,
-                        font=font,
-                        fill=(int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), int(255 * opacity)))
+                          font=font,
+                          fill=(int(color[1:3], 16),
+                                int(color[3:5], 16),
+                                int(color[5:7], 16),
+                                int(255 * opacity)))
+
+                # 旋转文字图层
+                if text_angle != 0:
+                    rot_center = (x + tw // 2, y + th // 2)
+                    text_layer = text_layer.rotate(text_angle, center=rot_center, expand=0)
+
+                canvas = Image.alpha_composite(canvas, text_layer)
 
             # 2. 绘制图片水印
             if has_image_wm:
                 wm = self.watermark_image.resize(
                     (int(self.watermark_original_width * wm_scale),
-                    int(self.watermark_original_height * wm_scale)),
-                    Image.ANTIALIAS)
+                     int(self.watermark_original_height * wm_scale)),
+                    Image.LANCZOS)
                 wm = Image.blend(Image.new("RGBA", wm.size, (255, 255, 255, 0)), wm, wm_opacity)
 
+                # 旋转
+                if image_angle != 0:
+                    wm = wm.rotate(image_angle, expand=1)
+
+                # 位置计算（旋转后的尺寸）
                 cx = img.width * wm_pos[0]
                 cy = img.height * wm_pos[1]
                 margin_x, margin_y = img.width * 0.02, img.height * 0.02
