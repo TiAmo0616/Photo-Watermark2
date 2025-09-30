@@ -10,7 +10,7 @@ def read_long_description():
 
 setup(
     name="photo-watermark2",
-    version="1.0.0",
+    version="2.0.0",
     author="Your Name",
     author_email="your.email@example.com",
     description="一款运行于 Windows 平台的水印文件本地应用",
