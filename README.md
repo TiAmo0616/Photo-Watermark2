@@ -24,11 +24,11 @@
 
 ### 方法一：直接运行exe文件（推荐）
 
-从[Releases](https://github.com/your-username/Photo-Watermark2/releases)页面下载最新版本的exe文件，直接运行即可。
+从[Releases](https://github.com/TiAmo0616/Photo-Watermark2/releases)页面下载最新版本的exe文件，直接运行即可。
 
 ### 方法二：从源码运行
 
-1. 确保已安装Python 3.7或更高版本
+1. 确保已安装Python 3.10或更高版本
 2. 克隆或下载本项目
 3. 安装依赖：
    ```
