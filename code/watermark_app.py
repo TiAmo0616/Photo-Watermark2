@@ -489,17 +489,48 @@ class WatermarkApp:
         """
         获取字体，支持粗体和斜体
         """
-        font_path,_ = self.get_font_path(font_name, bold, italic)
+        # 分别检查粗体和斜体字体文件是否存在
+        bold_font_path, bold_found = self.get_font_path(font_name, bold, False) if bold else (None, 0)
+        italic_font_path, italic_found = self.get_font_path(font_name, False, italic) if italic else (None, 0)
+        bold_italic_font_path, bold_italic_found = self.get_font_path(font_name, bold, italic) if (bold and italic) else (None, 0)
+        
+        # 根据不同的组合情况选择字体文件
+        font_path = None
+        style_found = 0
+        
+        if bold and italic and bold_italic_found:
+            font_path = bold_italic_font_path
+            style_found = 1
+        elif bold and italic and bold_found and italic_found:
+            # 有单独的粗体和斜体文件，但没有粗斜体文件
+            font_path = bold_font_path  # 使用粗体文件
+            style_found = 1
+        elif bold and italic and bold_found:
+            font_path = bold_font_path
+            style_found = 1
+        elif bold and italic and italic_found:
+            font_path = italic_font_path
+            style_found = 1
+        elif bold and bold_found:
+            font_path = bold_font_path
+            style_found = 1
+        elif italic and italic_found:
+            font_path = italic_font_path
+            style_found = 1
+        else:
+            # 没有找到特殊样式字体，使用基础字体
+            font_path, style_found = self.get_font_path(font_name, False, False)
         
         if font_path:
             try:
-                if _ == 0:
-                    if bold:
-                         messagebox.showwarning("提示", "该字体暂不支持加粗！")
-                         self.bold_var.set(0)
-                    elif italic:
-                         messagebox.showwarning("提示", "该字体暂不支持斜体！")
-                         self.italic_var.set(0)
+                # 只有在找不到特定样式字体时才取消勾选
+                if bold and not (bold_found or bold_italic_found):
+                    messagebox.showwarning("提示", "该字体暂不支持加粗！")
+                    self.bold_var.set(0)
+                if italic and not (italic_found or bold_italic_found):
+                    messagebox.showwarning("提示", "该字体暂不支持斜体！")
+                    self.italic_var.set(0)
+                    
                 # 使用指定的字体文件
                 font = ImageFont.truetype(font_path, font_size)
                 return font
